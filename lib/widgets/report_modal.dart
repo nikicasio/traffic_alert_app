@@ -29,16 +29,16 @@ class _ReportModalState extends State<ReportModal> {
       color: Color(0xFF3B82F6), // blue-500
     ),
     ReportType(
-      type: 'accident',
-      icon: Icons.car_crash,
-      label: 'Accident',
-      color: Color(0xFFF97316), // orange-500
-    ),
-    ReportType(
-      type: 'blocked_road',
+      type: 'roadwork',
       icon: Icons.construction,
       label: 'Roadwork',
       color: Color(0xFFF59E0B), // yellow-500
+    ),
+    ReportType(
+      type: 'obstacle',
+      icon: Icons.warning,
+      label: 'Obstacle',
+      color: Color(0xFFF97316), // orange-500
     ),
   ];
 

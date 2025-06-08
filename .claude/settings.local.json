@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(flutter analyze:*)",
-      "Bash(/mnt/c/flutter/bin/flutter analyze)"
+      "Bash(/mnt/c/flutter/bin/flutter analyze)",
+      "Bash(flutter:*)",
+      "Bash(/mnt/c/flutter/bin/flutter doctor)",
+      "Bash(/mnt/c/flutter/bin/flutter pub get)",
+      "Bash(dart analyze:*)",
+      "Bash(bash -c \"flutter analyze\")",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

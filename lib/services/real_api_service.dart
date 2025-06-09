@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/alert.dart';
 
 class RealApiService {
-  static const String baseUrl = 'http://localhost:8000/api'; // Local backend server
+  static const String baseUrl = 'http://10.0.2.2:8000/api'; // Local backend server (Android emulator)
   static const String _tokenKey = 'auth_token';
   
   String? _authToken;

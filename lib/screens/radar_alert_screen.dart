@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/alert.dart';
-import '../services/mock_data_service.dart';
+import '../services/real_api_service.dart';
+import '../services/websocket_service.dart';
 import '../services/device_location_service.dart';
 import '../services/offline_storage.dart';
 import '../services/connectivity_service.dart';
@@ -25,7 +26,8 @@ class _RadarAlertScreenState extends State<RadarAlertScreen>
   
   // Services
   final DeviceLocationService _locationService = DeviceLocationService();
-  final MockDataService _dataService = MockDataService();
+  final RealApiService _apiService = RealApiService();
+  final WebSocketService _websocketService = WebSocketService();
   final OfflineStorage _offlineStorage = OfflineStorage();
   final ConnectivityService _connectivityService = ConnectivityService();
   final NotificationService _notificationService = NotificationService();
@@ -94,8 +96,12 @@ class _RadarAlertScreenState extends State<RadarAlertScreen>
     try {
       // Initialize services
       await _notificationService.initialize();
-      _dataService.initialize();
+      await _apiService.initialize();
+      await _websocketService.initialize();
       await _locationService.initialize();
+      
+      // Update FCM token on server after authentication
+      await _notificationService.updateTokenOnServer();
       
       // Listen to connectivity status
       _connectivityService.connectionStream.listen((isConnected) {
@@ -119,35 +125,23 @@ class _RadarAlertScreenState extends State<RadarAlertScreen>
           if (!_isLocationReady) _isLocationReady = true;
         });
         
+        // Update WebSocket location subscriptions
+        _websocketService.subscribeToLocationUpdates(
+          location.latitude!,
+          location.longitude!,
+          radiusKm: 10,
+        );
+        _websocketService.updateUserLocation(location.latitude!, location.longitude!);
+        
         _fetchNearbyAlerts();
       });
       
-      // Data service event listeners
-      _dataService.newAlertStream.listen((alert) {
-        setState(() {
-          if (!_alerts.any((a) => a.id == alert.id)) {
-            _alerts.add(alert);
-          }
-        });
-      });
+      // Check API health
+      final isHealthy = await _apiService.checkHealth();
+      print('API Health: $isHealthy');
       
-      _dataService.alertConfirmedStream.listen((data) {
-        setState(() {
-          final index = _alerts.indexWhere((a) => a.id == data['id']);
-          if (index != -1) {
-            final updatedAlert = Alert(
-              id: _alerts[index].id,
-              type: _alerts[index].type,
-              latitude: _alerts[index].latitude,
-              longitude: _alerts[index].longitude,
-              reportedAt: _alerts[index].reportedAt,
-              confirmedCount: data['confirmedCount'],
-              isActive: _alerts[index].isActive,
-            );
-            _alerts[index] = updatedAlert;
-          }
-        });
-      });
+      // Setup WebSocket event listeners
+      _setupWebSocketListeners();
       
       // Initial data loading
       setState(() {
@@ -163,18 +157,79 @@ class _RadarAlertScreenState extends State<RadarAlertScreen>
     }
   }
 
+  void _setupWebSocketListeners() {
+    // Listen to real-time alert creation
+    _websocketService.alertCreatedStream.listen((Alert newAlert) {
+      setState(() {
+        // Add new alert if not already in the list
+        if (!_alerts.any((alert) => alert.id == newAlert.id)) {
+          _alerts.add(newAlert);
+        }
+      });
+      
+      // Calculate distance and show local notification for real-time alerts
+      final alertWithDistance = _calculateAlertDistance(newAlert);
+      _notificationService.showAlertNotification(alertWithDistance);
+      
+      print('New alert received via WebSocket: ${newAlert.type}');
+    });
+
+    // Listen to alert confirmations
+    _websocketService.alertConfirmedStream.listen((Map<String, dynamic> data) {
+      final alertId = data['alert_id'];
+      if (alertId != null) {
+        setState(() {
+          // Update confirmation count for the alert
+          final alertIndex = _alerts.indexWhere((alert) => alert.id.toString() == alertId.toString());
+          if (alertIndex != -1) {
+            // Refresh alerts to get updated confirmation count
+            _fetchNearbyAlerts();
+          }
+        });
+        print('Alert confirmed via WebSocket: $alertId');
+      }
+    });
+
+    // Listen to alert dismissals/expirations
+    _websocketService.alertDismissedStream.listen((Map<String, dynamic> data) {
+      final alertId = data['alert_id'];
+      final shouldRemove = data['should_remove'] ?? false;
+      
+      if (alertId != null && shouldRemove) {
+        setState(() {
+          _alerts.removeWhere((alert) => alert.id.toString() == alertId.toString());
+        });
+        print('Alert removed via WebSocket: $alertId');
+      }
+    });
+
+    // Listen to WebSocket connection status
+    _websocketService.connectionStatusStream.listen((bool isConnected) {
+      print('WebSocket connection status: $isConnected');
+      if (isConnected && _isLocationReady) {
+        // Subscribe to location updates when connection is restored
+        _websocketService.subscribeToLocationUpdates(
+          _currentLocation.latitude,
+          _currentLocation.longitude,
+          radiusKm: 10,
+        );
+      }
+    });
+  }
+
   Future<void> _fetchNearbyAlerts() async {
     if (!_isLocationReady) return;
     
     try {
-      final alerts = _dataService.getNearbyAlerts(
-        _currentLocation.latitude,
-        _currentLocation.longitude,
+      final alerts = await _apiService.getNearbyAlerts(
+        latitude: _currentLocation.latitude,
+        longitude: _currentLocation.longitude,
         radius: 10000,
       );
       
       setState(() {
         _alerts = alerts;
+        _isOnline = true;
       });
     } catch (e) {
       print('Error fetching alerts: $e');
@@ -203,10 +258,10 @@ class _RadarAlertScreenState extends State<RadarAlertScreen>
       final unsyncedAlerts = await _offlineStorage.getUnsyncedAlerts();
       
       for (var alertMap in unsyncedAlerts) {
-        final result = await _dataService.reportAlert(
-          alertMap['type'],
-          alertMap['latitude'],
-          alertMap['longitude'],
+        final result = await _apiService.reportAlert(
+          type: alertMap['type'],
+          latitude: alertMap['latitude'],
+          longitude: alertMap['longitude'],
         );
         
         if (result != null) {
@@ -223,7 +278,13 @@ class _RadarAlertScreenState extends State<RadarAlertScreen>
     
     try {
       if (stillThere) {
-        await _dataService.confirmAlertStillThere(alertId);
+        await _apiService.confirmAlert(
+          alertId: alertId.toString(),
+          confirmationType: 'confirmed',
+        );
+        
+        // Also send via WebSocket for real-time updates
+        _websocketService.confirmAlert(alertId.toString(), 'confirmed');
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -240,15 +301,21 @@ class _RadarAlertScreenState extends State<RadarAlertScreen>
           );
         }
       } else {
-        final removed = await _dataService.reportAlertNotThere(alertId);
+        final success = await _apiService.confirmAlert(
+          alertId: alertId.toString(),
+          confirmationType: 'not_there',
+        );
+        
+        // Also send via WebSocket for real-time updates
+        _websocketService.confirmAlert(alertId.toString(), 'not_there');
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(removed 
-                  ? 'Alert removed - thank you for the feedback!' 
+              content: Text(success 
+                  ? 'Alert marked as resolved - thank you for the feedback!' 
                   : 'Feedback recorded - thank you!'),
-              backgroundColor: removed ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
+              backgroundColor: success ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
               duration: const Duration(seconds: 2),
               behavior: SnackBarBehavior.floating,
               margin: const EdgeInsets.all(16),
@@ -277,7 +344,14 @@ class _RadarAlertScreenState extends State<RadarAlertScreen>
       HapticFeedback.heavyImpact();
       
       try {
-        final success = await _dataService.confirmAlert(alert.id!);
+        final success = await _apiService.confirmAlert(
+          alertId: alert.id!.toString(),
+          confirmationType: 'confirmed',
+        );
+        
+        // Also send via WebSocket for real-time updates
+        _websocketService.confirmAlert(alert.id!.toString(), 'confirmed');
+        
         if (success) {
           _fetchNearbyAlerts();
           
@@ -311,11 +385,14 @@ class _RadarAlertScreenState extends State<RadarAlertScreen>
     HapticFeedback.heavyImpact();
     
     try {
-      final result = await _dataService.reportAlert(
-        type,
-        _currentLocation.latitude,
-        _currentLocation.longitude,
+      final result = await _apiService.reportAlert(
+        type: type,
+        latitude: _currentLocation.latitude,
+        longitude: _currentLocation.longitude,
       );
+      
+      // Also send via WebSocket for real-time updates
+      _websocketService.reportAlert(type, _currentLocation.latitude, _currentLocation.longitude);
       
       if (result != null) {
         setState(() {
@@ -389,6 +466,27 @@ class _RadarAlertScreenState extends State<RadarAlertScreen>
       default:
         return 'Alert';
     }
+  }
+  
+  Alert _calculateAlertDistance(Alert alert) {
+    if (!_isLocationReady) return alert;
+    
+    final Distance distance = Distance();
+    final double distanceInMeters = distance(
+      _currentLocation,
+      LatLng(alert.latitude, alert.longitude),
+    );
+    
+    return Alert(
+      id: alert.id,
+      type: alert.type,
+      latitude: alert.latitude,
+      longitude: alert.longitude,
+      reportedAt: alert.reportedAt,
+      confirmedCount: alert.confirmedCount,
+      isActive: alert.isActive,
+      distance: distanceInMeters,
+    );
   }
 
   Alert? get _nextAlert {
@@ -626,7 +724,7 @@ class _RadarAlertScreenState extends State<RadarAlertScreen>
     _viewTransitionController.dispose();
     _modalController.dispose();
     _locationService.dispose();
-    _dataService.dispose();
+    _websocketService.dispose();
     _connectivityService.dispose();
     super.dispose();
   }

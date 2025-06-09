@@ -43,3 +43,39 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Laravel/PHP Backend
+/backend/.env
+/backend/vendor/
+/backend/node_modules/
+/backend/storage/app/public/
+/backend/storage/framework/cache/
+/backend/storage/framework/sessions/
+/backend/storage/framework/testing/
+/backend/storage/framework/views/
+/backend/storage/logs/
+/backend/bootstrap/cache/
+/backend/public/hot
+/backend/public/storage
+/backend/public/build
+/backend/.phpunit.result.cache
+/backend/Homestead.json
+/backend/Homestead.yaml
+/backend/npm-debug.log
+/backend/yarn-error.log
+/backend/.vite-*
+
+# GPX files
+*.gpx
+
+# Temporary and backup files
+*~
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini

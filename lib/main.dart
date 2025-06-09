@@ -1,7 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'screens/radar_alert_screen.dart';
+import 'screens/auth_screen.dart';
+import 'services/real_api_service.dart';
+import 'services/notification_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase
+  await Firebase.initializeApp();
+  
+  // Set up background message handler
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  
+  // Initialize API service
+  final apiService = RealApiService();
+  await apiService.initialize();
+  
   runApp(TrafficAlertApp());
 }
 
@@ -15,7 +32,69 @@ class TrafficAlertApp extends StatelessWidget {
         visualDensity: VisualDensity.adaptivePlatformDensity,
         scaffoldBackgroundColor: const Color(0xFF111827), // gray-900
       ),
-      home: RadarAlertScreen(),
+      home: AuthCheckScreen(),
+      routes: {
+        '/auth': (context) => AuthScreen(),
+        '/home': (context) => RadarAlertScreen(),
+      },
+    );
+  }
+}
+
+class AuthCheckScreen extends StatefulWidget {
+  @override
+  _AuthCheckScreenState createState() => _AuthCheckScreenState();
+}
+
+class _AuthCheckScreenState extends State<AuthCheckScreen> {
+  final _apiService = RealApiService();
+  bool _isChecking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthStatus();
+  }
+
+  Future<void> _checkAuthStatus() async {
+    await Future.delayed(Duration(seconds: 1)); // Show splash for a moment
+    
+    if (_apiService.isAuthenticated) {
+      Navigator.of(context).pushReplacementNamed('/home');
+    } else {
+      Navigator.of(context).pushReplacementNamed('/auth');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF111827),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.traffic,
+              size: 100,
+              color: Colors.red,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'RadarAlert',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 32),
+            CircularProgressIndicator(
+              color: Colors.red,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

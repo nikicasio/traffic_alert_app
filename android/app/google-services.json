@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "725244266050",
+    "project_id": "alert-8fd31",
+    "storage_bucket": "alert-8fd31.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:725244266050:android:5f879f9e3e5f01e5b6cfdb",
+        "android_client_info": {
+          "package_name": "com.alert.trafficapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDd82NnbWFU-q4gK-aPAwR-eYVgDe1oK_w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

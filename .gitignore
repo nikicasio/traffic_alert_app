@@ -24,6 +24,7 @@ Thumbs.db
 *.sln
 *.swp
 *.bak
+*.iml
 
 # Local settings from tools
 .claude/

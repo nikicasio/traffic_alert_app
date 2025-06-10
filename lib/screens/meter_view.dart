@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../models/alert.dart';
 import '../widgets/alert_card.dart';
 import '../services/mock_data_service.dart';
+import '../services/speed_limit_service.dart';
 import 'dart:math' as math;
 
 class MeterView extends StatefulWidget {
@@ -13,6 +14,7 @@ class MeterView extends StatefulWidget {
   final Function(Alert) onConfirmAlert;
   final double currentLatitude;
   final double currentLongitude;
+  final SpeedLimitResult? speedLimit;
 
   const MeterView({
     Key? key,
@@ -23,6 +25,7 @@ class MeterView extends StatefulWidget {
     required this.onConfirmAlert,
     required this.currentLatitude,
     required this.currentLongitude,
+    this.speedLimit,
   }) : super(key: key);
 
   @override
@@ -34,17 +37,14 @@ class _MeterViewState extends State<MeterView>
   late AnimationController _speedAnimationController;
   late AnimationController _progressAnimationController;
   late AnimationController _alertCardAnimationController;
-  late AnimationController _drawerAnimationController;
   
   late Animation<double> _speedAnimation;
   late Animation<double> _progressAnimation;
   late Animation<Offset> _alertCardSlideAnimation;
   late Animation<double> _alertCardFadeAnimation;
-  late Animation<double> _drawerSlideAnimation;
   
   double _previousSpeed = 0;
   Alert? _previousAlert;
-  bool _isDrawerExpanded = false;
 
   @override
   void initState() {
@@ -66,10 +66,6 @@ class _MeterViewState extends State<MeterView>
       vsync: this,
     );
     
-    _drawerAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
     
     // Initialize animations
     _speedAnimation = Tween<double>(
@@ -104,13 +100,6 @@ class _MeterViewState extends State<MeterView>
       curve: Curves.easeOut,
     ));
     
-    _drawerSlideAnimation = Tween<double>(
-      begin: 0.3,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _drawerAnimationController,
-      curve: Curves.easeOutCubic,
-    ));
     
     // Start initial animations
     _speedAnimationController.forward();
@@ -169,23 +158,9 @@ class _MeterViewState extends State<MeterView>
     _speedAnimationController.dispose();
     _progressAnimationController.dispose();
     _alertCardAnimationController.dispose();
-    _drawerAnimationController.dispose();
     super.dispose();
   }
 
-  void _toggleDrawer() {
-    setState(() {
-      _isDrawerExpanded = !_isDrawerExpanded;
-    });
-    
-    if (_isDrawerExpanded) {
-      _drawerAnimationController.forward();
-    } else {
-      _drawerAnimationController.reverse();
-    }
-    
-    HapticFeedback.selectionClick();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -237,12 +212,21 @@ class _MeterViewState extends State<MeterView>
                         },
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                        'km/h',
-                        style: TextStyle(
-                          color: Color(0xFF9CA3AF), // gray-400
-                          fontSize: 18,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text(
+                            'km/h',
+                            style: TextStyle(
+                              color: Color(0xFF9CA3AF), // gray-400
+                              fontSize: 18,
+                            ),
+                          ),
+                          if (widget.speedLimit?.hasSpeedLimit == true) ...[
+                            const SizedBox(width: 16),
+                            _buildSpeedLimitIndicator(),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 24),
                       
@@ -301,25 +285,8 @@ class _MeterViewState extends State<MeterView>
               ),
             ),
             
-            // Upcoming alerts section with slide animation
-            Expanded(
-              flex: 2,
-              child: AnimatedBuilder(
-                animation: _drawerSlideAnimation,
-                builder: (context, child) {
-                  return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 0.3),
-                      end: Offset.zero,
-                    ).animate(CurvedAnimation(
-                      parent: _drawerAnimationController,
-                      curve: Curves.easeOutCubic,
-                    )),
-                    child: _buildUpcomingAlertsSection(),
-                  );
-                },
-              ),
-            ),
+            // Spacer to push content up
+            const SizedBox(height: 40),
           ],
         ),
       ),
@@ -477,237 +444,98 @@ class _MeterViewState extends State<MeterView>
               ),
             ],
           ),
+          
+          const SizedBox(height: 16),
+          
+          // 3 Upcoming alerts below distance
+          _buildUpcomingAlertsList(),
         ],
       ),
     );
   }
 
-  Widget _buildUpcomingAlertsSection() {
+  // New compact upcoming alerts list
+  Widget _buildUpcomingAlertsList() {
     final upcomingAlerts = widget.alerts.skip(1).take(3).toList();
     
+    if (upcomingAlerts.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1F2937), // gray-800
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-      ),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      constraints: const BoxConstraints(maxWidth: 400),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Pull indicator with tap to expand
-          GestureDetector(
-            onTap: _toggleDrawer,
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Column(
+          Text(
+            'Next 3 alerts',
+            style: const TextStyle(
+              color: Color(0xFF9CA3AF), // gray-400
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...upcomingAlerts.asMap().entries.map((entry) {
+            final index = entry.key;
+            final alert = entry.value;
+            return Container(
+              margin: EdgeInsets.only(bottom: index < upcomingAlerts.length - 1 ? 6 : 0),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1F2937).withOpacity(0.5), // gray-800 transparent
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _getAlertColor(alert.type).withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
                 children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    margin: const EdgeInsets.only(bottom: 12),
-                    width: _isDrawerExpanded ? 60 : 40,
-                    height: 4,
+                  // Alert icon
+                  Container(
+                    padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: _isDrawerExpanded 
-                          ? const Color(0xFF9CA3AF) 
-                          : const Color(0xFF6B7280), // gray-500
-                      borderRadius: BorderRadius.circular(2),
+                      color: _getAlertColor(alert.type),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(
+                      _getAlertIcon(alert.type),
+                      color: Colors.white,
+                      size: 12,
                     ),
                   ),
-                  AnimatedRotation(
-                    turns: _isDrawerExpanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 300),
-                    child: Icon(
-                      Icons.keyboard_arrow_up,
-                      color: const Color(0xFF6B7280),
-                      size: 16,
+                  const SizedBox(width: 8),
+                  // Alert label
+                  Expanded(
+                    child: Text(
+                      _getAlertLabel(alert.type),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // Distance
+                  Text(
+                    '${_getDistanceInKm(alert).toStringAsFixed(1)}km',
+                    style: const TextStyle(
+                      color: Color(0xFF9CA3AF), // gray-400
+                      fontSize: 12,
                     ),
                   ),
                 ],
               ),
-            ),
-          ),
-          
-          // Section title
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            alignment: Alignment.centerLeft,
-            child: const Text(
-              'Upcoming Alerts',
-              style: TextStyle(
-                color: Color(0xFF9CA3AF), // gray-400
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          
-          // Upcoming alerts list with proper scrolling
-          Flexible(
-            child: upcomingAlerts.isEmpty
-                ? Container(
-                    padding: const EdgeInsets.all(32),
-                    child: const Text(
-                      'No upcoming alerts',
-                      style: TextStyle(
-                        color: Color(0xFF6B7280), // gray-500
-                        fontSize: 14,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                : AnimatedList(
-                    shrinkWrap: true,
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    initialItemCount: upcomingAlerts.length,
-                    itemBuilder: (context, index, animation) {
-                      if (index >= upcomingAlerts.length) return const SizedBox.shrink();
-                      return SlideTransition(
-                        position: animation.drive(
-                          Tween<Offset>(
-                            begin: const Offset(1, 0),
-                            end: Offset.zero,
-                          ).chain(CurveTween(curve: Curves.easeOutCubic)),
-                        ),
-                        child: FadeTransition(
-                          opacity: animation,
-                          child: _buildUpcomingAlertItem(upcomingAlerts[index], index),
-                        ),
-                      );
-                    },
-                  ),
-          ),
+            );
+          }).toList(),
         ],
       ),
     );
   }
 
-  Widget _buildUpcomingAlertItem(Alert alert, int index) {
-    return TweenAnimationBuilder<double>(
-      duration: Duration(milliseconds: 300 + (index * 100)),
-      tween: Tween(begin: 0.0, end: 1.0),
-      curve: Curves.easeOutBack,
-      builder: (context, value, child) {
-        return Transform.scale(
-          scale: 0.8 + (0.2 * value),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF374151), // gray-700
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1 * value),
-                  blurRadius: 4 * value,
-                  offset: Offset(0, 2 * value),
-                ),
-              ],
-            ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Alert icon with pulse animation
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: _getAlertColor(alert.type),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: _getAlertColor(alert.type).withOpacity(0.3),
-                    blurRadius: 6,
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-              child: Icon(
-                _getAlertIcon(alert.type),
-                color: Colors.white,
-                size: 16,
-              ),
-            ),
-            
-            const SizedBox(width: 12),
-            
-            // Alert info
-            Expanded(
-              flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _getAlertLabel(alert.type),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Road ahead', // Simplified location
-                    style: const TextStyle(
-                      color: Color(0xFF9CA3AF), // gray-400
-                      fontSize: 12,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(width: 8),
-            
-            // Distance and confirmations
-            Expanded(
-              flex: 1,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${_getDistanceInKm(alert).toStringAsFixed(1)} km',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${alert.confirmedCount} confirms',
-                    style: const TextStyle(
-                      color: Color(0xFF9CA3AF), // gray-400
-                      fontSize: 12,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-          ),
-        );
-      },
-    );
-  }
 
   double _getDistanceInKm(Alert alert) {
     final dataService = MockDataService();
@@ -791,6 +619,19 @@ class _MeterViewState extends State<MeterView>
   }
 
   List<Color> _getSpeedGradientColors(double speed) {
+    // If we have speed limit data, use it for color determination
+    if (widget.speedLimit?.speedLimitKmh != null) {
+      final speedLimit = widget.speedLimit!.speedLimitKmh!;
+      if (speed > speedLimit) {
+        return [const Color(0xFFEF4444), const Color(0xFFDC2626)]; // red when over speed limit
+      } else if (speed > speedLimit * 0.9) {
+        return [const Color(0xFFF59E0B), const Color(0xFFD97706)]; // yellow when near speed limit
+      } else {
+        return [const Color(0xFF10B981), const Color(0xFF059669)]; // green when under speed limit
+      }
+    }
+    
+    // Fallback to general speed-based colors if no speed limit data
     if (speed <= 30) {
       return [const Color(0xFF10B981), const Color(0xFF059669)]; // green
     } else if (speed <= 60) {
@@ -800,5 +641,113 @@ class _MeterViewState extends State<MeterView>
     } else {
       return [const Color(0xFFEF4444), const Color(0xFFDC2626)]; // red
     }
+  }
+
+  Widget _buildSpeedLimitIndicator() {
+    if (widget.speedLimit?.speedLimitKmh == null) {
+      return const SizedBox.shrink();
+    }
+
+    final speedLimitKmh = widget.speedLimit!.speedLimitKmh!;
+    final currentSpeedKmh = widget.currentSpeed * 3.6;
+    final isOverLimit = currentSpeedKmh > speedLimitKmh;
+    final isNearLimit = currentSpeedKmh > speedLimitKmh * 0.9;
+    
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isOverLimit 
+            ? const Color(0xFFEF4444).withOpacity(0.1) // red background when over limit
+            : isNearLimit 
+                ? const Color(0xFFF59E0B).withOpacity(0.1) // yellow when near limit
+                : const Color(0xFF1F2937), // gray-800
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isOverLimit 
+              ? const Color(0xFFEF4444) // red border when over limit
+              : isNearLimit 
+                  ? const Color(0xFFF59E0B) // yellow when near limit
+                  : const Color(0xFF374151), // gray-700
+          width: 2,
+        ),
+        boxShadow: isOverLimit ? [
+          BoxShadow(
+            color: const Color(0xFFEF4444).withOpacity(0.3),
+            blurRadius: 8,
+            spreadRadius: 1,
+          ),
+        ] : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Speed limit icon
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: isOverLimit 
+                  ? const Color(0xFFEF4444) 
+                  : isNearLimit 
+                      ? const Color(0xFFF59E0B)
+                      : Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isOverLimit 
+                    ? const Color(0xFFDC2626) 
+                    : isNearLimit 
+                        ? const Color(0xFFD97706)
+                        : const Color(0xFF374151),
+                width: 2,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                speedLimitKmh.toString(),
+                style: TextStyle(
+                  color: isOverLimit || isNearLimit ? Colors.white : const Color(0xFF1F2937),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Speed limit label
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'LIMIT',
+                style: TextStyle(
+                  color: isOverLimit 
+                      ? const Color(0xFFEF4444) 
+                      : isNearLimit 
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFF9CA3AF),
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              if (widget.speedLimit!.confidence > 0.7) 
+                Icon(
+                  Icons.check_circle,
+                  size: 8,
+                  color: const Color(0xFF10B981),
+                )
+              else
+                Icon(
+                  Icons.help_outline,
+                  size: 8,
+                  color: const Color(0xFF6B7280),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

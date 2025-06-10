@@ -5,12 +5,24 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Alert;
 use App\Models\AlertConfirmation;
+use App\Events\AlertCreated;
+use App\Events\AlertConfirmed;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 
 class AlertController extends Controller
 {
+    private function broadcastToSocketIO($endpoint, $data)
+    {
+        try {
+            $socketUrl = config('app.socket_io_url', 'http://127.0.0.1:3001');
+            Http::timeout(3)->post("{$socketUrl}/{$endpoint}", $data);
+        } catch (\Exception $e) {
+            \Log::warning("Failed to broadcast to Socket.IO: " . $e->getMessage());
+        }
+    }
     public function index(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -50,19 +62,19 @@ class AlertController extends Controller
 
             $alerts = $query->get()->map(function ($alert) use ($latitude, $longitude) {
                 return [
-                    'id' => $alert->id,
+                    'id' => (int) $alert->id,
                     'type' => $alert->type,
-                    'latitude' => $alert->latitude,
-                    'longitude' => $alert->longitude,
-                    'severity' => $alert->severity,
+                    'latitude' => (float) $alert->latitude,
+                    'longitude' => (float) $alert->longitude,
+                    'severity' => (int) $alert->severity,
                     'description' => $alert->description,
-                    'confirmed_count' => $alert->confirmed_count,
-                    'dismissed_count' => $alert->dismissed_count,
-                    'is_active' => $alert->is_active,
+                    'confirmed_count' => (int) $alert->confirmed_count,
+                    'dismissed_count' => (int) $alert->dismissed_count,
+                    'is_active' => (bool) $alert->is_active,
                     'reported_at' => $alert->created_at->toISOString(),
-                    'distance_meters' => isset($alert->distance_km) ? round($alert->distance_km * 1000) : null,
+                    'distance_meters' => isset($alert->distance_km) ? (int) round($alert->distance_km * 1000) : null,
                     'user' => $alert->user ? [
-                        'id' => $alert->user->id,
+                        'id' => (int) $alert->user->id,
                         'username' => $alert->user->username,
                     ] : null,
                 ];
@@ -114,18 +126,18 @@ class AlertController extends Controller
                 ->get()
                 ->map(function ($alert) {
                     return [
-                        'id' => $alert->id,
+                        'id' => (int) $alert->id,
                         'type' => $alert->type,
-                        'latitude' => $alert->latitude,
-                        'longitude' => $alert->longitude,
-                        'severity' => $alert->severity,
+                        'latitude' => (float) $alert->latitude,
+                        'longitude' => (float) $alert->longitude,
+                        'severity' => (int) $alert->severity,
                         'description' => $alert->description,
-                        'confirmed_count' => $alert->confirmed_count,
-                        'is_active' => $alert->is_active,
+                        'confirmed_count' => (int) $alert->confirmed_count,
+                        'is_active' => (bool) $alert->is_active,
                         'reported_at' => $alert->created_at->toISOString(),
-                        'distance_meters' => isset($alert->distance_km) ? round($alert->distance_km * 1000) : null,
+                        'distance_meters' => isset($alert->distance_km) ? (int) round($alert->distance_km * 1000) : null,
                         'user' => $alert->user ? [
-                            'id' => $alert->user->id,
+                            'id' => (int) $alert->user->id,
                             'username' => $alert->user->username,
                         ] : null,
                     ];
@@ -177,22 +189,43 @@ class AlertController extends Controller
 
             $alert->load('user:id,username');
 
+            // Broadcast alert creation event
+            event(new AlertCreated($alert));
+            
+            // Broadcast to Socket.IO server
+            $this->broadcastToSocketIO('broadcast/alert-created', [
+                'id' => $alert->id,
+                'type' => $alert->type,
+                'latitude' => $alert->latitude,
+                'longitude' => $alert->longitude,
+                'severity' => $alert->severity,
+                'description' => $alert->description,
+                'confirmed_count' => $alert->confirmed_count,
+                'dismissed_count' => $alert->dismissed_count,
+                'is_active' => $alert->is_active,
+                'reported_at' => $alert->created_at->toISOString(),
+                'user' => [
+                    'id' => $alert->user->id,
+                    'username' => $alert->user->username,
+                ],
+            ]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Alert reported successfully',
                 'alert' => [
-                    'id' => $alert->id,
+                    'id' => (int) $alert->id,
                     'type' => $alert->type,
-                    'latitude' => $alert->latitude,
-                    'longitude' => $alert->longitude,
-                    'severity' => $alert->severity,
+                    'latitude' => (float) $alert->latitude,
+                    'longitude' => (float) $alert->longitude,
+                    'severity' => (int) $alert->severity,
                     'description' => $alert->description,
-                    'confirmed_count' => $alert->confirmed_count,
-                    'dismissed_count' => $alert->dismissed_count,
-                    'is_active' => $alert->is_active,
+                    'confirmed_count' => (int) $alert->confirmed_count,
+                    'dismissed_count' => (int) $alert->dismissed_count,
+                    'is_active' => (bool) $alert->is_active,
                     'reported_at' => $alert->created_at->toISOString(),
                     'user' => [
-                        'id' => $alert->user->id,
+                        'id' => (int) $alert->user->id,
                         'username' => $alert->user->username,
                     ],
                 ]
@@ -238,12 +271,14 @@ class AlertController extends Controller
             }
 
             // Create confirmation
-            AlertConfirmation::create([
+            $confirmation = AlertConfirmation::create([
                 'alert_id' => $alert->id,
                 'user_id' => $request->user()->id,
                 'confirmation_type' => $request->confirmation_type,
                 'comment' => $request->comment,
             ]);
+
+            $confirmation->load('user:id,username');
 
             // Update alert counts
             switch ($request->confirmation_type) {
@@ -262,16 +297,36 @@ class AlertController extends Controller
                 $alert->update(['is_active' => false]);
             }
 
+            // Broadcast alert confirmation event
+            event(new AlertConfirmed($alert, $confirmation));
+            
+            // Broadcast to Socket.IO server
+            $this->broadcastToSocketIO('broadcast/alert-confirmed', [
+                'alert_id' => $alert->id,
+                'confirmation_type' => $confirmation->confirmation_type,
+                'comment' => $confirmation->comment,
+                'user' => [
+                    'id' => $confirmation->user->id,
+                    'username' => $confirmation->user->username,
+                ],
+                'alert' => [
+                    'id' => $alert->id,
+                    'confirmed_count' => $alert->confirmed_count,
+                    'dismissed_count' => $alert->dismissed_count,
+                    'is_active' => $alert->is_active,
+                ],
+            ]);
+
             DB::commit();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Alert confirmation recorded',
                 'alert' => [
-                    'id' => $alert->id,
-                    'confirmed_count' => $alert->confirmed_count,
-                    'dismissed_count' => $alert->dismissed_count,
-                    'is_active' => $alert->is_active,
+                    'id' => (int) $alert->id,
+                    'confirmed_count' => (int) $alert->confirmed_count,
+                    'dismissed_count' => (int) $alert->dismissed_count,
+                    'is_active' => (bool) $alert->is_active,
                 ]
             ]);
 
@@ -293,29 +348,29 @@ class AlertController extends Controller
             return response()->json([
                 'success' => true,
                 'alert' => [
-                    'id' => $alert->id,
+                    'id' => (int) $alert->id,
                     'type' => $alert->type,
-                    'latitude' => $alert->latitude,
-                    'longitude' => $alert->longitude,
-                    'severity' => $alert->severity,
+                    'latitude' => (float) $alert->latitude,
+                    'longitude' => (float) $alert->longitude,
+                    'severity' => (int) $alert->severity,
                     'description' => $alert->description,
-                    'confirmed_count' => $alert->confirmed_count,
-                    'dismissed_count' => $alert->dismissed_count,
-                    'is_active' => $alert->is_active,
+                    'confirmed_count' => (int) $alert->confirmed_count,
+                    'dismissed_count' => (int) $alert->dismissed_count,
+                    'is_active' => (bool) $alert->is_active,
                     'reported_at' => $alert->created_at->toISOString(),
                     'expires_at' => $alert->expires_at ? $alert->expires_at->toISOString() : null,
                     'user' => $alert->user ? [
-                        'id' => $alert->user->id,
+                        'id' => (int) $alert->user->id,
                         'username' => $alert->user->username,
                     ] : null,
                     'confirmations' => $alert->confirmations->map(function ($confirmation) {
                         return [
-                            'id' => $confirmation->id,
+                            'id' => (int) $confirmation->id,
                             'confirmation_type' => $confirmation->confirmation_type,
                             'comment' => $confirmation->comment,
                             'created_at' => $confirmation->created_at->toISOString(),
                             'user' => [
-                                'id' => $confirmation->user->id,
+                                'id' => (int) $confirmation->user->id,
                                 'username' => $confirmation->user->username,
                             ],
                         ];
@@ -364,11 +419,11 @@ class AlertController extends Controller
                 'success' => true,
                 'message' => 'Alert updated successfully',
                 'alert' => [
-                    'id' => $alert->id,
+                    'id' => (int) $alert->id,
                     'type' => $alert->type,
-                    'severity' => $alert->severity,
+                    'severity' => (int) $alert->severity,
                     'description' => $alert->description,
-                    'is_active' => $alert->is_active,
+                    'is_active' => (bool) $alert->is_active,
                     'updated_at' => $alert->updated_at->toISOString(),
                 ]
             ]);

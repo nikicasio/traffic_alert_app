@@ -9,6 +9,8 @@ class Alert {
   final int confirmedCount;
   final bool isActive;
   final double? distance;
+  final int? severity;
+  final String? description;
 
   Alert({
     this.id,
@@ -19,6 +21,8 @@ class Alert {
     this.confirmedCount = 1,
     this.isActive = true,
     this.distance,
+    this.severity,
+    this.description,
   });
 
   // Get LatLng object for map
@@ -35,6 +39,8 @@ class Alert {
       confirmedCount: json['confirmed_count'] ?? 1,
       isActive: json['is_active'] ?? true,
       distance: json['distance_meters']?.toDouble(),
+      severity: json['severity'],
+      description: json['description'] as String?,
     );
   }
 
@@ -48,6 +54,8 @@ class Alert {
       'reported_at': reportedAt.toIso8601String(),
       'confirmed_count': confirmedCount,
       'is_active': isActive,
+      'severity': severity,
+      'description': description,
     };
   }
 
@@ -61,6 +69,8 @@ class Alert {
       'reported_at': reportedAt.toIso8601String(),
       'confirmed_count': confirmedCount,
       'is_active': isActive ? 1 : 0,
+      'severity': severity,
+      'description': description,
     };
   }
 
@@ -74,6 +84,8 @@ class Alert {
       reportedAt: DateTime.parse(map['reported_at']),
       confirmedCount: map['confirmed_count'] ?? 1,
       isActive: map['is_active'] == 1,
+      severity: map['severity'],
+      description: map['description'],
     );
   }
 

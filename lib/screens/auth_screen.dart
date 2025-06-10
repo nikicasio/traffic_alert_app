@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/real_api_service.dart';
 import '../services/notification_service.dart';
+import '../services/websocket_service.dart';
 
 class AuthScreen extends StatefulWidget {
   @override
@@ -15,6 +16,7 @@ class _AuthScreenState extends State<AuthScreen> {
   
   final _apiService = RealApiService();
   final _notificationService = NotificationService();
+  final _websocketService = WebSocketService();
   
   bool _isLogin = true;
   bool _isLoading = false;
@@ -90,6 +92,12 @@ class _AuthScreenState extends State<AuthScreen> {
       if (result != null) {
         // Update FCM token on server after successful authentication
         await _notificationService.updateTokenOnServer();
+        
+        // Update WebSocket authentication
+        await _websocketService.updateAuthentication(
+          result['user']['id'].toString(),
+          result['token'],
+        );
         
         // Navigate to home screen
         Navigator.of(context).pushReplacementNamed('/home');

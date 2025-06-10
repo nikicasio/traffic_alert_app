@@ -23,8 +23,11 @@ class Alert extends Model
     ];
 
     protected $casts = [
-        'latitude' => 'decimal:8',
-        'longitude' => 'decimal:8',
+        'latitude' => 'float',
+        'longitude' => 'float',
+        'severity' => 'integer',
+        'confirmed_count' => 'integer',
+        'dismissed_count' => 'integer',
         'is_active' => 'boolean',
         'expires_at' => 'datetime',
         'created_at' => 'datetime',
@@ -66,16 +69,28 @@ class Alert extends Model
     public function scopeNearby($query, $latitude, $longitude, $radiusInMeters = 10000)
     {
         $radiusInKm = $radiusInMeters / 1000;
-        return $query->selectRaw("
-            *,
+        return $query->select('*')
+        ->selectRaw("
             (6371 * acos(
                 cos(radians(?)) * cos(radians(latitude)) *
                 cos(radians(longitude) - radians(?)) +
                 sin(radians(?)) * sin(radians(latitude))
             )) as distance_km
         ", [$latitude, $longitude, $latitude])
-        ->having('distance_km', '<=', $radiusInKm)
-        ->orderBy('distance_km');
+        ->whereRaw("
+            (6371 * acos(
+                cos(radians(?)) * cos(radians(latitude)) *
+                cos(radians(longitude) - radians(?)) +
+                sin(radians(?)) * sin(radians(latitude))
+            )) <= ?
+        ", [$latitude, $longitude, $latitude, $radiusInKm])
+        ->orderByRaw("
+            (6371 * acos(
+                cos(radians(?)) * cos(radians(latitude)) *
+                cos(radians(longitude) - radians(?)) +
+                sin(radians(?)) * sin(radians(latitude))
+            ))
+        ", [$latitude, $longitude, $latitude]);
     }
 
     // Scope for directional alerts (in direction of travel)
@@ -85,21 +100,41 @@ class Alert extends Model
         $angleInRadians = deg2rad($angleInDegrees / 2);
         $headingInRadians = deg2rad($heading);
         
-        return $query->selectRaw("
-            *,
+        return $query->select('*')
+        ->selectRaw("
             (6371 * acos(
                 cos(radians(?)) * cos(radians(latitude)) *
                 cos(radians(longitude) - radians(?)) +
                 sin(radians(?)) * sin(radians(latitude))
-            )) as distance_km,
+            )) as distance_km
+        ", [$latitude, $longitude, $latitude])
+        ->selectRaw("
             ATAN2(
                 SIN(RADIANS(longitude) - RADIANS(?)) * COS(RADIANS(latitude)),
                 COS(RADIANS(?)) * SIN(RADIANS(latitude)) - 
                 SIN(RADIANS(?)) * COS(RADIANS(latitude)) * COS(RADIANS(longitude) - RADIANS(?))
             ) as bearing_radians
-        ", [$latitude, $longitude, $latitude, $longitude, $latitude, $latitude, $longitude])
-        ->having('distance_km', '<=', $radiusInKm)
-        ->havingRaw('ABS(bearing_radians - ?) <= ?', [$headingInRadians, $angleInRadians])
-        ->orderBy('distance_km');
+        ", [$longitude, $latitude, $latitude, $longitude])
+        ->whereRaw("
+            (6371 * acos(
+                cos(radians(?)) * cos(radians(latitude)) *
+                cos(radians(longitude) - radians(?)) +
+                sin(radians(?)) * sin(radians(latitude))
+            )) <= ?
+        ", [$latitude, $longitude, $latitude, $radiusInKm])
+        ->whereRaw("
+            ABS(ATAN2(
+                SIN(RADIANS(longitude) - RADIANS(?)) * COS(RADIANS(latitude)),
+                COS(RADIANS(?)) * SIN(RADIANS(latitude)) - 
+                SIN(RADIANS(?)) * COS(RADIANS(latitude)) * COS(RADIANS(longitude) - RADIANS(?))
+            ) - ?) <= ?
+        ", [$longitude, $latitude, $latitude, $longitude, $headingInRadians, $angleInRadians])
+        ->orderByRaw("
+            (6371 * acos(
+                cos(radians(?)) * cos(radians(latitude)) *
+                cos(radians(longitude) - radians(?)) +
+                sin(radians(?)) * sin(radians(latitude))
+            ))
+        ", [$latitude, $longitude, $latitude]);
     }
 }

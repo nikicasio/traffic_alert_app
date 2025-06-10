@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import '../models/alert.dart';
-import '../services/api_service.dart';
+import '../services/real_api_service.dart';
 import '../services/location_service.dart';
 import '../services/offline_storage.dart';
 import '../services/socket_service.dart';
@@ -23,9 +24,9 @@ class _MapScreenState extends State<MapScreen> {
   
   // Services
   final LocationService _locationService = LocationService();
-  final ApiService _apiService = ApiService(baseUrl: 'http://192.168.0.50:3000');
+  final RealApiService _apiService = RealApiService();
   final OfflineStorage _offlineStorage = OfflineStorage();
-  final SocketService _socketService = SocketService(serverUrl: 'http://192.168.0.50:3000');
+  final SocketService _socketService = SocketService(serverUrl: 'http://159.69.41.118');
   final ConnectivityService _connectivityService = ConnectivityService();
   final NotificationService _notificationService = NotificationService();
   
@@ -34,6 +35,7 @@ class _MapScreenState extends State<MapScreen> {
   LatLng _currentLocation = LatLng(0, 0);
   bool _isLocationReady = false;
   bool _isOnline = true;
+  Timer? _alertRefreshTimer;
   
   @override
   void initState() {
@@ -48,9 +50,17 @@ class _MapScreenState extends State<MapScreen> {
       
       // Initialize API service
       await _apiService.initialize();
+      print('🔑 API service initialized - Auth status: ${_apiService.isAuthenticated}');
       
-      // Initialize location service
-      await _locationService.initialize();
+      // Initialize location service (handle failures gracefully)
+      try {
+        await _locationService.initialize();
+        print('✅ Location service initialized successfully');
+      } catch (e) {
+        print('⚠️ Location service failed to initialize: $e');
+        print('📍 Will use default location for alerts');
+        // Continue without location services - alerts will use default location
+      }
       
       // Listen to connectivity status
       _connectivityService.connectionStream.listen((isConnected) {
@@ -137,11 +147,21 @@ class _MapScreenState extends State<MapScreen> {
         });
       });
       
-      // Initial data loading
+      // Initial data loading - always attempt to fetch alerts
       if (await _connectivityService.checkConnection()) {
-        _fetchNearbyAlerts();
+        print('🌐 Online - fetching alerts from server');
+        await _fetchNearbyAlerts();
+        
+        // Start periodic refresh timer (every 60 seconds)
+        _alertRefreshTimer = Timer.periodic(Duration(seconds: 60), (timer) {
+          if (_isOnline) {
+            print('⏰ Periodic alert refresh triggered');
+            _fetchNearbyAlerts();
+          }
+        });
       } else {
-        _loadLocalAlerts();
+        print('📱 Offline - loading local alerts');
+        await _loadLocalAlerts();
       }
     } catch (e) {
       print('Error initializing services: $e');
@@ -156,18 +176,34 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _fetchNearbyAlerts() async {
-    if (!_isLocationReady) return;
+    // If location is not ready, try to fetch with default location
+    LatLng locationToUse = _currentLocation;
+    if (!_isLocationReady) {
+      // Use a default location (Berlin center) if user location is not available
+      locationToUse = LatLng(52.5200, 13.4050);
+      print('⚠️ Location not ready, using default location: ${locationToUse.latitude}, ${locationToUse.longitude}');
+    }
     
     try {
+      print('🔍 Attempting to fetch alerts...');
+      print('📍 Location: ${locationToUse.latitude}, ${locationToUse.longitude}');
+      print('🔐 Authenticated: ${_apiService.isAuthenticated}');
+      
       final alerts = await _apiService.getNearbyAlerts(
-        _currentLocation.latitude,
-        _currentLocation.longitude,
+        latitude: locationToUse.latitude,
+        longitude: locationToUse.longitude,
         radius: 10000, // 10km radius
       );
       
       setState(() {
         _alerts = alerts;
       });
+      print('✅ Successfully fetched ${alerts.length} alerts');
+      
+      // Log each alert for debugging
+      for (int i = 0; i < alerts.length; i++) {
+        print('   Alert ${i + 1}: ${alerts[i].type} at ${alerts[i].latitude}, ${alerts[i].longitude}');
+      }
     } catch (e) {
       print('Error fetching alerts: $e');
       setState(() {
@@ -581,6 +617,7 @@ class _MapScreenState extends State<MapScreen> {
   
   @override
   void dispose() {
+    _alertRefreshTimer?.cancel();
     _locationService.dispose();
     _socketService.dispose();
     _connectivityService.dispose();

@@ -5,7 +5,8 @@ import 'package:latlong2/latlong.dart';
 import '../models/alert.dart';
 import '../widgets/alert_marker.dart';
 import '../services/mock_data_service.dart';
-import 'dart:math';
+import '../services/speed_limit_service.dart';
+import 'dart:math' as math;
 
 class MapViewNew extends StatefulWidget {
   final LatLng currentLocation;
@@ -15,6 +16,7 @@ class MapViewNew extends StatefulWidget {
   final bool isLocationReady;
   final bool isOnline;
   final double currentHeading;
+  final SpeedLimitResult? speedLimit;
   final Function(int, bool)? onAlertConfirmation; // callback for "still there?" responses
 
   const MapViewNew({
@@ -26,6 +28,7 @@ class MapViewNew extends StatefulWidget {
     required this.isLocationReady,
     required this.isOnline,
     required this.currentHeading,
+    this.speedLimit,
     this.onAlertConfirmation,
   }) : super(key: key);
 
@@ -45,6 +48,11 @@ class _MapViewNewState extends State<MapViewNew>
 
   @override
   void initState() {
+    print('🗺️ MapViewNew initialized with ${widget.alerts.length} alerts:');
+    for (int i = 0; i < widget.alerts.length; i++) {
+      final alert = widget.alerts[i];
+      print('   MapView Alert ${i + 1}: ID ${alert.id}, Type: ${alert.type}, Location: ${alert.latitude}, ${alert.longitude}');
+    }
     super.initState();
     _mapController = MapController();
     
@@ -67,6 +75,14 @@ class _MapViewNewState extends State<MapViewNew>
   @override
   void didUpdateWidget(MapViewNew oldWidget) {
     super.didUpdateWidget(oldWidget);
+    
+    if (oldWidget.alerts.length != widget.alerts.length) {
+      print('🔄 MapViewNew alerts updated: ${oldWidget.alerts.length} → ${widget.alerts.length}');
+      for (int i = 0; i < widget.alerts.length; i++) {
+        final alert = widget.alerts[i];
+        print('   Updated Alert ${i + 1}: ID ${alert.id}, Type: ${alert.type}, Location: ${alert.latitude}, ${alert.longitude}');
+      }
+    }
     
     // Auto-recenter if following user
     if (_isFollowingUser && widget.isLocationReady) {
@@ -118,109 +134,7 @@ class _MapViewNewState extends State<MapViewNew>
   }
 
   Widget _buildConfirmationPrompt() {
-    // Check if there are any passed alerts that need confirmation
-    // This would be connected to the data service's passed alerts
-    // For now, we'll show a sample prompt when next alert is very close
-    
-    if (widget.nextAlert != null) {
-      final distance = _getDistanceInKm(widget.nextAlert!);
-      final shouldShowPrompt = distance <= 0.02; // Within 20 meters
-      
-      if (shouldShowPrompt) {
-        return Positioned(
-          top: 80,
-          left: 16,
-          right: 16,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F2937), // gray-800
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFF59E0B), width: 2), // yellow border
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      _getAlertIcon(widget.nextAlert!.type),
-                      color: _getAlertColor(widget.nextAlert!.type),
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Still there?',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Is the ${_getAlertLabel(widget.nextAlert!.type).toLowerCase()} still at this location?',
-                  style: const TextStyle(
-                    color: Color(0xFF9CA3AF), // gray-400
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          widget.onAlertConfirmation?.call(widget.nextAlert!.id!, true);
-                          HapticFeedback.lightImpact();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981), // green-500
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: const Text('Yes', style: TextStyle(fontSize: 14)),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          widget.onAlertConfirmation?.call(widget.nextAlert!.id!, false);
-                          HapticFeedback.lightImpact();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEF4444), // red-500
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: const Text('No', style: TextStyle(fontSize: 14)),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-    }
-    
+    // Removed - using new StillThereDialog instead
     return const SizedBox.shrink();
   }
 
@@ -268,7 +182,7 @@ class _MapViewNewState extends State<MapViewNew>
                             animation: _rotationAnimation,
                             builder: (context, child) {
                               return Transform.rotate(
-                                angle: (_rotationAnimation.value * pi) / 180,
+                                angle: (_rotationAnimation.value * math.pi) / 180,
                                 child: Container(
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF3B82F6), // blue-500
@@ -291,34 +205,67 @@ class _MapViewNewState extends State<MapViewNew>
                             },
                           ),
                         ),
-                        // Alert markers with distance-based visibility
-                        ...widget.alerts.map((alert) {
+                        // Alert markers with improved visibility and spacing
+                        ...widget.alerts.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final alert = entry.value;
                           final distance = _getDistanceInKm(alert);
-                          final opacity = distance <= 0.5 ? 1.0 : (1.0 - (distance - 0.5) / 0.5).clamp(0.3, 1.0);
+                          
+                          // Make all markers fully visible for now to debug
+                          final opacity = 1.0;
+                          
+                          print('🎯 Creating marker ${index + 1}/${widget.alerts.length} for Alert ID ${alert.id}: ${alert.type} at ${alert.latitude},${alert.longitude}, distance: ${distance.toStringAsFixed(2)}km');
+                          
+                          // Use index-based offset for consistent, non-overlapping positioning
+                          final baseOffsetDistance = 0.0002; // Base offset distance
+                          final offsetMultiplier = (index * 1.2) + 1; // Spread markers out more
+                          final angle = (index * 45.0) * (math.pi / 180); // Different angle for each marker
+                          
+                          final offsetLat = alert.latitude + (math.cos(angle) * baseOffsetDistance * offsetMultiplier);
+                          final offsetLng = alert.longitude + (math.sin(angle) * baseOffsetDistance * offsetMultiplier);
+                          
+                          print('🎯 Marker ${index + 1} offset: original(${alert.latitude}, ${alert.longitude}) -> offset(${offsetLat}, ${offsetLng}) angle: ${(index * 45.0)}°');
                           
                           return Marker(
-                            point: LatLng(alert.latitude, alert.longitude),
-                            width: 40,
-                            height: 40,
-                            builder: (context) => AnimatedOpacity(
-                              opacity: opacity,
-                              duration: const Duration(milliseconds: 300),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: _getAlertColor(alert.type),
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _getAlertColor(alert.type).withOpacity(0.3 * opacity),
-                                      blurRadius: 8,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
-                                ),
-                                child: Icon(
-                                  _getAlertIcon(alert.type),
+                            point: LatLng(offsetLat, offsetLng),
+                            width: 50,
+                            height: 50,
+                            builder: (context) => Container(
+                              decoration: BoxDecoration(
+                                color: _getAlertColor(alert.type),
+                                shape: BoxShape.circle,
+                                border: Border.all(
                                   color: Colors.white,
-                                  size: 20,
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.3),
+                                    blurRadius: 6,
+                                    spreadRadius: 1,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _getAlertIcon(alert.type),
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                                    if (widget.alerts.length <= 5) // Only show numbers if not too many alerts
+                                      Text(
+                                        '${index + 1}',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -362,12 +309,21 @@ class _MapViewNewState extends State<MapViewNew>
                             );
                           },
                         ),
-                        const Text(
-                          'km/h',
-                          style: TextStyle(
-                            color: Color(0xFF9CA3AF), // gray-400
-                            fontSize: 14,
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'km/h',
+                              style: TextStyle(
+                                color: Color(0xFF9CA3AF), // gray-400
+                                fontSize: 14,
+                              ),
+                            ),
+                            if (widget.speedLimit?.hasSpeedLimit == true) ...[
+                              const SizedBox(width: 8),
+                              _buildCompactSpeedLimitIndicator(),
+                            ],
+                          ],
                         ),
                       ],
                     ),
@@ -510,45 +466,6 @@ class _MapViewNewState extends State<MapViewNew>
                 // Confirmation prompt for passed alerts
                 _buildConfirmationPrompt(),
                 
-                // Online/Offline indicator
-                Positioned(
-                  top: 120, // Moved down to make space for confirmation prompt
-                  right: 16,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: widget.isOnline ? const Color(0xFF10B981) : const Color(0xFFEF4444), // green-500 or red-500
-                      borderRadius: BorderRadius.circular(4),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          widget.isOnline ? Icons.wifi : Icons.wifi_off,
-                          color: Colors.white,
-                          size: 12,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          widget.isOnline ? 'Online' : 'Offline',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               ],
             )
           : const Center(
@@ -602,6 +519,19 @@ class _MapViewNewState extends State<MapViewNew>
   }
   
   Color _getSpeedColor(double speed) {
+    // If we have speed limit data, use it for color determination
+    if (widget.speedLimit?.speedLimitKmh != null) {
+      final speedLimit = widget.speedLimit!.speedLimitKmh!;
+      if (speed > speedLimit) {
+        return const Color(0xFFEF4444); // red when over speed limit
+      } else if (speed > speedLimit * 0.9) {
+        return const Color(0xFFF59E0B); // yellow when near speed limit
+      } else {
+        return const Color(0xFF10B981); // green when under speed limit
+      }
+    }
+    
+    // Fallback to general speed-based colors if no speed limit data
     if (speed <= 30) return const Color(0xFF10B981); // green
     if (speed <= 60) return const Color(0xFFF59E0B); // yellow
     if (speed <= 100) return const Color(0xFFF97316); // orange
@@ -674,5 +604,58 @@ class _MapViewNewState extends State<MapViewNew>
       default:
         return const Color(0xFF6B7280); // gray-500
     }
+  }
+
+  Widget _buildCompactSpeedLimitIndicator() {
+    if (widget.speedLimit?.speedLimitKmh == null) {
+      return const SizedBox.shrink();
+    }
+
+    final speedLimitKmh = widget.speedLimit!.speedLimitKmh!;
+    final currentSpeedKmh = widget.currentSpeed * 3.6;
+    final isOverLimit = currentSpeedKmh > speedLimitKmh;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: isOverLimit 
+            ? const Color(0xFFEF4444).withOpacity(0.1)
+            : const Color(0xFF374151), // gray-700
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isOverLimit 
+              ? const Color(0xFFEF4444)
+              : const Color(0xFF6B7280),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: isOverLimit ? const Color(0xFFEF4444) : Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isOverLimit ? const Color(0xFFDC2626) : const Color(0xFF374151),
+                width: 1,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                speedLimitKmh.toString(),
+                style: TextStyle(
+                  color: isOverLimit ? Colors.white : const Color(0xFF1F2937),
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

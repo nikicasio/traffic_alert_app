@@ -1,21 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'screens/radar_alert_screen.dart';
 import 'screens/auth_screen.dart';
+import 'screens/my_reports_screen.dart';
 import 'services/real_api_service.dart';
-import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialize Firebase
-  await Firebase.initializeApp();
-  
-  // Set up background message handler
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  
-  // Initialize API service
+  // Initialize API service (core functionality)
   final apiService = RealApiService();
   await apiService.initialize();
   
@@ -36,6 +28,7 @@ class TrafficAlertApp extends StatelessWidget {
       routes: {
         '/auth': (context) => AuthScreen(),
         '/home': (context) => RadarAlertScreen(),
+        '/my-reports': (context) => MyReportsScreen(),
       },
     );
   }

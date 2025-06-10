@@ -17,6 +17,20 @@ Route::get('/health', function () {
     ]);
 });
 
+// DEBUG: Check all alerts in database
+Route::get('/debug/alerts', function () {
+    $allAlerts = \App\Models\Alert::all(['id', 'type', 'is_active', 'expires_at', 'created_at'])->toArray();
+    $activeAlerts = \App\Models\Alert::active()->get(['id', 'type', 'is_active', 'expires_at', 'created_at'])->toArray();
+    
+    return response()->json([
+        'all_alerts_count' => count($allAlerts),
+        'all_alerts' => $allAlerts,
+        'active_alerts_count' => count($activeAlerts),
+        'active_alerts' => $activeAlerts,
+        'now' => now()->toISOString(),
+    ]);
+});
+
 // Authentication routes (public)
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
@@ -45,6 +59,10 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     
     // User management
+    Route::prefix('user')->group(function () {
+        Route::get('/reports', [UserController::class, 'reports']); // Get user's reported alerts
+    });
+    
     Route::prefix('users')->group(function () {
         Route::get('/stats', [UserController::class, 'stats']); // Get user statistics
         Route::get('/alerts', [UserController::class, 'alerts']); // Get user's alerts

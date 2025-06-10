@@ -31,7 +31,24 @@
       "WebFetch(domain:laravel.com)",
       "WebFetch(domain:orchid.software)",
       "Bash(composer:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(mv:*)",
+      "Bash(dart pub global activate:*)",
+      "Bash(find:*)",
+      "Bash(ip route:*)",
+      "Bash(hostname:*)",
+      "Bash(pkill:*)",
+      "Bash(grep:*)",
+      "Bash(npm install)",
+      "Bash(npm run socket:*)",
+      "Bash(expect:*)",
+      "Bash(tar:*)",
+      "Bash(scp:*)",
+      "Bash(npm run:*)",
+      "Bash(sshpass -p '28034001' ssh -o StrictHostKeyChecking=no root@159.69.41.118 'cd /var/www/traffic-alert-app/backend && cat > app/Http/Controllers/Api/UserController.php << \"EOF\"\n<?php\n\nnamespace App\\Http\\Controllers\\Api;\n\nuse App\\Http\\Controllers\\Controller;\nuse App\\Models\\Alert;\nuse Illuminate\\Http\\Request;\n\nclass UserController extends Controller\n{\n    public function reports(Request $request)\n    {\n        try {\n            $user = $request->user();\n            \n            $reports = Alert::where(\"user_id\", $user->id)\n                ->orderBy(\"created_at\", \"desc\")\n                ->get()\n                ->map(function ($alert) {\n                    return [\n                        \"id\" => $alert->id,\n                        \"type\" => $alert->type,\n                        \"latitude\" => $alert->latitude,\n                        \"longitude\" => $alert->longitude,\n                        \"severity\" => $alert->severity,\n                        \"description\" => $alert->description,\n                        \"confirmed_count\" => $alert->confirmed_count,\n                        \"dismissed_count\" => $alert->dismissed_count,\n                        \"is_active\" => $alert->is_active,\n                        \"reported_at\" => $alert->created_at->toISOString(),\n                        \"expires_at\" => $alert->expires_at ? $alert->expires_at->toISOString() : null,\n                    ];\n                });\n\n            return response()->json([\n                \"success\" => true,\n                \"reports\" => $reports,\n                \"count\" => $reports->count(),\n            ]);\n\n        } catch (\\Exception $e) {\n            return response()->json([\n                \"success\" => false,\n                \"message\" => \"Failed to get user reports\",\n                \"error\" => $e->getMessage()\n            ], 500);\n        }\n    }\n}\nEOF')",
+      "Bash(/usr/bin/flutter analyze)",
+      "Bash(sshpass:*)",
+      "Bash(rg:*)"
     ],
     "deny": []
   }

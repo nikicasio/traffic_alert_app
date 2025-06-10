@@ -45,8 +45,7 @@ dependencies:
   flutter_compass: ^0.7.0
   internet_connection_checker: ^1.0.0
   flutter_local_notifications: ^14.0.0
-  firebase_messaging: ^14.6.5
-  firebase_core: ^2.15.0
+  intl: ^0.18.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

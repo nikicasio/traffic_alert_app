@@ -1,81 +1,142 @@
-# Miscellaneous
-*.class
+# ===================================================================
+# General / OS / IDE
+# ===================================================================
+# Logs and databases
 *.log
-*.pyc
-*.swp
+*.sql
+*.sqlite
+*.sqlite3
+
+# OS-generated files
 .DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
+# IDE-specific files
 .idea/
+.vscode/
+*.suo
+*.user
+*.sln
+*.swp
+*.bak
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# Local settings from tools
+.claude/
 
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
+# ===================================================================
+# Flutter App (Root Project)
+# ===================================================================
+# Flutter/Dart general
+.packages
 .dart_tool/
+build/
+
+# Flutter tool
 .flutter-plugins
 .flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
 
-# Symbolication related
-app.*.symbols
+# Sensitive Information - VERY IMPORTANT
+# This file contains API keys and should NEVER be committed.
+# Ensure every developer creates their own from the Firebase console.
+**/google-services.json
 
-# Obfuscation related
-app.*.map.json
+# Android build files
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/key.properties
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# iOS build files
+ios/build/
+ios/Pods/
+ios/Flutter/App.framework
+ios/Flutter/engine
+ios/Flutter/flutter_assets
+ios/.symlinks/
+ios/Runner/GeneratedPluginRegistrant.h
+ios/Runner/GeneratedPluginRegistrant.m
+*.hmap
+*.ipa
 
-# Laravel/PHP Backend
-/backend/.env
-/backend/vendor/
+# macOS build files
+macos/build/
+macos/Pods/
+macos/.symlinks/
+macos/Flutter/ephemeral/
+
+# Linux build files
+linux/build/
+linux/flutter/ephemeral/
+
+# Windows build files
+windows/build/
+windows/flutter/ephemeral/
+
+# Web build files
+web/build/
+
+# Generated data files (optional)
+# You have a .gpx file in your root. If these are test data you want to keep,
+# leave this commented out. If they are generated outputs, uncomment it.
+# *.gpx
+
+
+# ===================================================================
+# Laravel Backend (in /backend/ directory)
+# ===================================================================
+# Dependencies
 /backend/node_modules/
-/backend/storage/app/public/
-/backend/storage/framework/cache/
-/backend/storage/framework/sessions/
-/backend/storage/framework/testing/
-/backend/storage/framework/views/
+/backend/vendor/
+
+# Sensitive Environment File - VERY IMPORTANT
+# This file contains database credentials, API keys, etc.
+# It should NEVER be committed. Use .env.example as a template.
+/backend/.env
+
+# Laravel-specific files
+/backend/bootstrap/cache/*.php
+/backend/storage/app/
+/backend/storage/framework/
 /backend/storage/logs/
-/backend/bootstrap/cache/
-/backend/public/hot
 /backend/public/storage
-/backend/public/build
+/backend/public/hot
+/backend/public/build/
 /backend/.phpunit.result.cache
-/backend/Homestead.json
-/backend/Homestead.yaml
-/backend/npm-debug.log
-/backend/yarn-error.log
-/backend/.vite-*
+/backend/coverage/
 
-# GPX files
-*.gpx
+# NPM/Yarn/PNPM log files
+/backend/npm-debug.log*
+/backend/yarn-debug.log*
+/backend/yarn-error.log*
+/backend/pnpm-debug.log*
 
-# Temporary and backup files
-*~
-*.tmp
-*.bak
-*.swp
-*.swo
+# Ignore all files in storage except for the .gitignore files
+# This prevents accidental commits of user-uploaded files or sessions.
+/backend/storage/*
+!/backend/storage/.gitignore
+/backend/storage/app/*
+!/backend/storage/app/.gitignore
+!/backend/storage/app/public/
+/backend/storage/app/public/*
+!/backend/storage/app/public/.gitignore
+!/backend/storage/app/private/
+/backend/storage/app/private/*
+!/backend/storage/app/private/.gitignore
+/backend/storage/framework/*
+!/backend/storage/framework/.gitignore
 
-# OS generated files
-Thumbs.db
-ehthumbs.db
-Desktop.ini
+# ===================================================================
+# Files that SHOULD be committed
+# ===================================================================
+# Lock files ensure consistent dependencies across all environments.
+# Do NOT add these to your .gitignore file.
+#
+# !pubspec.lock
+# !backend/composer.lock
+# !backend/package-lock.json

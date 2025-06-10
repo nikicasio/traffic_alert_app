@@ -1,4 +1,4 @@
-wslbuildscript {
+buildscript {
     repositories {
         google()
         mavenCentral()

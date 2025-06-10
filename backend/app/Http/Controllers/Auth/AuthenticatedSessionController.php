@@ -33,6 +33,12 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // Check if the authenticated user is a super admin
+        $user = Auth::user();
+        if ($user && $user->email === 'admin@traffic-alerts.com') {
+            return redirect()->intended(route('superadmin.dashboard', absolute: false));
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

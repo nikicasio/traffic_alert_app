@@ -71,12 +71,24 @@ class DeviceLocationService {
         distanceFilter: 10, // Update when moved 10 meters
       );
 
-      // Get initial location
-      _currentLocation = await _location.getLocation();
+      // Get initial location with timeout and retry
+      try {
+        _currentLocation = await _location.getLocation().timeout(
+          Duration(seconds: 10),
+          onTimeout: () => throw Exception('GPS timeout after 10 seconds'),
+        );
+        print('Initial GPS location obtained: ${_currentLocation?.latitude}, ${_currentLocation?.longitude}');
+      } catch (e) {
+        print('Failed to get initial GPS location: $e');
+        // Continue initialization even without initial location
+        _currentLocation = null;
+      }
       _currentHeading = _currentLocation?.heading ?? 0.0;
       
       _isInitialized = true;
-      _locationController.add(_currentLocation!);
+      if (_currentLocation != null) {
+        _locationController.add(_currentLocation!);
+      }
       _headingController.add(_currentHeading);
 
       // Start listening to location updates
@@ -96,6 +108,7 @@ class DeviceLocationService {
   void _startLocationUpdates() {
     _locationSubscription?.cancel(); // Cancel existing subscription
     
+    print('🔄 Starting GPS location updates...');
     _locationSubscription = _location.onLocationChanged.listen(
       (LocationData locationData) {
         _currentLocation = locationData;

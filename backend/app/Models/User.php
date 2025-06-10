@@ -84,4 +84,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(AlertConfirmation::class);
     }
+
+    public function confirmations()
+    {
+        return $this->hasMany(AlertConfirmation::class);
+    }
 }
